@@ -7,6 +7,7 @@ export class VibeLearnPanel implements vscode.WebviewViewProvider {
   public static readonly viewType = 'vibelearn.panel';
 
   private view?: vscode.WebviewView;
+  private onQuizNowCallback?: () => void;
   private onSnoozeCallback?: () => void;
   private onSkipCallback?: () => void;
   private onAnswerCallback?: (answer: string, score: number) => void;
@@ -22,6 +23,9 @@ export class VibeLearnPanel implements vscode.WebviewViewProvider {
 
     webviewView.webview.onDidReceiveMessage((msg: { type: string; payload?: unknown }) => {
       switch (msg.type) {
+        case 'quizNow':
+          this.onQuizNowCallback?.();
+          break;
         case 'snooze':
           this.onSnoozeCallback?.();
           break;
@@ -49,6 +53,7 @@ export class VibeLearnPanel implements vscode.WebviewViewProvider {
     this.view.webview.html = this.getFeedbackHtml(wasCorrect, explanation);
   }
 
+  onQuizNow(cb: () => void): void { this.onQuizNowCallback = cb; }
   onSnooze(cb: () => void): void { this.onSnoozeCallback = cb; }
   onSkip(cb: () => void): void { this.onSkipCallback = cb; }
   onAnswer(cb: (answer: string, score: number) => void): void { this.onAnswerCallback = cb; }
@@ -56,10 +61,14 @@ export class VibeLearnPanel implements vscode.WebviewViewProvider {
   private getIdleHtml(): string {
     return html(`
       <div class="idle">
-        <p>Coding away — VibeLearn is watching. 👀</p>
+        <p>Coding away — VibeLearn is watching.</p>
         <p class="hint">A learning check will appear after every 10 prompts or a 10-min break.</p>
-        <button onclick="postMsg('manual')">Quiz Me Now</button>
+        <button onclick="postMsg('quizNow')">Quiz Me Now</button>
       </div>
+      <script>
+        const vscode = acquireVsCodeApi();
+        function postMsg(type, payload) { vscode.postMessage({ type, payload }); }
+      </script>
     `);
   }
 

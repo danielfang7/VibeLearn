@@ -10,31 +10,40 @@ let store: KnowledgeStateStore | undefined;
 let sessionGapTimer: NodeJS.Timeout | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
-  const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-  if (!workspacePath) return;
-
   // Storage lives in the extension's global storage directory
   store = new KnowledgeStateStore(context.globalStorageUri.fsPath);
 
-  // UI panel
+  // UI panel — must be registered for the sidebar view to appear
   const panel = new VibeLearnPanel();
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(VibeLearnPanel.viewType, panel)
   );
 
+  const quizNow = () => {
+    if (!adapter) {
+      vscode.window.showWarningMessage('VibeLearn: Open a workspace folder to enable quizzes.');
+      return;
+    }
+    triggerIntervention('manual', adapter, panel, store!);
+  };
+
+  // Commands — must be registered before any early returns
+  context.subscriptions.push(
+    vscode.commands.registerCommand('vibelearn.quizNow', quizNow),
+    vscode.commands.registerCommand('vibelearn.snooze', () => {
+      if (!adapter) return;
+      scheduleSnoozedTrigger(adapter, panel, store!, 10);
+    })
+  );
+
+  panel.onQuizNow(quizNow);
+
+  const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  if (!workspacePath) return;
+
   // Bootstrap the trigger loop
   adapter = new ClaudeCodeAdapter(workspacePath);
   setupTriggerLoop(adapter, panel, store, context);
-
-  // Commands
-  context.subscriptions.push(
-    vscode.commands.registerCommand('vibelearn.quizNow', () => {
-      triggerIntervention('manual', adapter!, panel, store!);
-    }),
-    vscode.commands.registerCommand('vibelearn.snooze', () => {
-      scheduleSnoozedTrigger(adapter!, panel, store!, 10);
-    })
-  );
 
   // Panel snooze/skip wired to commands
   panel.onSnooze(() => {
@@ -131,9 +140,12 @@ async function triggerIntervention(
     Promise.resolve(store.getState()),
   ]);
 
-  if (context.diffs.length === 0 && context.prompts.length === 0) {
-    return; // Nothing to learn from yet
+  const hasContext = context.diffs.length > 0 || context.prompts.length > 0;
+  if (!hasContext && reason !== 'manual') {
+    // Auto-triggers with no session activity yet — nothing to learn from
+    return;
   }
+  // Manual trigger with no context: Claude will pick a general coding topic
 
   const engine = new InterventionEngine(apiKey);
   const intervention = await engine.generate(context, knowledgeState);
