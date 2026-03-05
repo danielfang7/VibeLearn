@@ -15,7 +15,8 @@ export class ClaudeCodeAdapter implements SessionAdapter {
   private promptCallbacks: Array<(prompt: string) => void> = [];
   private fileChangedCallbacks: Array<(diff: FileDiff) => void> = [];
   private watchers: fs.FSWatcher[] = [];
-  private lastSeenLine = 0;
+  // Track per-file line offsets so we don't re-parse the same lines
+  private lastSeenLines = new Map<string, number>();
 
   constructor(private readonly workspacePath: string) {
     this.startWatching();
@@ -80,16 +81,17 @@ export class ClaudeCodeAdapter implements SessionAdapter {
   }
 
   // Parse new lines from the JSONL log and emit prompt events.
-  // Claude Code log lines have the shape: { role: "user" | "assistant", content: string, ... }
+  // Actual Claude Code log format: { type: "user" | "assistant", isMeta?: bool, message: { role, content: string } }
   private processSessionFile(filePath: string): void {
     try {
       const content = fs.readFileSync(filePath, 'utf-8');
       const lines = content.split('\n').filter(Boolean);
+      const lastSeen = this.lastSeenLines.get(filePath) ?? 0;
 
-      for (let i = this.lastSeenLine; i < lines.length; i++) {
+      for (let i = lastSeen; i < lines.length; i++) {
         try {
           const entry = JSON.parse(lines[i]);
-          if (entry.role === 'user' && typeof entry.message?.content === 'string') {
+          if (isUserPrompt(entry)) {
             const prompt = entry.message.content as string;
             this.promptCount++;
             for (const cb of this.promptCallbacks) cb(prompt);
@@ -98,7 +100,7 @@ export class ClaudeCodeAdapter implements SessionAdapter {
           // malformed line — skip
         }
       }
-      this.lastSeenLine = lines.length;
+      this.lastSeenLines.set(filePath, lines.length);
     } catch {
       // file not readable yet — skip
     }
@@ -123,7 +125,7 @@ export class ClaudeCodeAdapter implements SessionAdapter {
       for (const line of content.split('\n').filter(Boolean)) {
         try {
           const entry = JSON.parse(line);
-          if (entry.role === 'user' && typeof entry.message?.content === 'string') {
+          if (isUserPrompt(entry)) {
             prompts.push(entry.message.content as string);
           }
         } catch {
@@ -147,6 +149,19 @@ export class ClaudeCodeAdapter implements SessionAdapter {
       return [];
     }
   }
+}
+
+// Guard for real user prompts — filters meta entries and slash-command messages.
+// Actual format: { type: "user", isMeta?: bool, message: { role: "user", content: string } }
+function isUserPrompt(entry: Record<string, unknown>): boolean {
+  if (entry.type !== 'user') return false;
+  if (entry.isMeta) return false;
+  const content = (entry.message as Record<string, unknown> | undefined)?.content;
+  if (typeof content !== 'string') return false;
+  // Filter slash-command echoes and local-command caveats
+  if (content.startsWith('<command-name>')) return false;
+  if (content.startsWith('<local-command-caveat>')) return false;
+  return content.trim().length > 0;
 }
 
 function parseDiffs(raw: string): FileDiff[] {
