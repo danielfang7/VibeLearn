@@ -65,7 +65,9 @@
     "watch": "node esbuild.js --watch",
     "test": "vitest run",
     "test:watch": "vitest",
-    "package": "vsce package"
+    "package": "vsce package",
+    "dev:seed": "node scripts/seed-session.mjs",
+    "dev:engine": "node scripts/run-engine.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.36.3"

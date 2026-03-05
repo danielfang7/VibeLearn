@@ -77,7 +77,7 @@ export class VibeLearnPanel implements vscode.WebviewViewProvider {
       ? intervention.options
           .map(
             (opt) =>
-              `<button class="option" onclick="submitAnswer('${escHtml(opt)}')">${escHtml(opt)}</button>`
+              `<button class="option" data-option="${escHtml(opt)}">${escHtml(opt)}</button>`
           )
           .join('')
       : `<textarea id="answer" placeholder="Your answer..."></textarea>
@@ -97,11 +97,15 @@ export class VibeLearnPanel implements vscode.WebviewViewProvider {
       <script>
         const vscode = acquireVsCodeApi();
         function postMsg(type, payload) { vscode.postMessage({ type, payload }); }
-        function submitAnswer(answer) { postMsg('answer', { answer, score: 1 }); }
         function submitFreeText() {
           const val = document.getElementById('answer').value.trim();
-          if (val) postMsg('answer', { answer: val, score: 0.5 }); // scored later
+          if (val) postMsg('answer', { answer: val, score: 0.5 });
         }
+        document.querySelectorAll('.option').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            postMsg('answer', { answer: btn.dataset.option, score: 1 });
+          });
+        });
       </script>
     `);
   }

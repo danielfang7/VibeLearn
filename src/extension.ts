@@ -3,11 +3,12 @@ import { ClaudeCodeAdapter } from './adapters/claudeCode';
 import { InterventionEngine } from './engine/interventionEngine';
 import { KnowledgeStateStore } from './storage/knowledgeState';
 import { VibeLearnPanel } from './ui/panel';
-import type { SessionAdapter, TriggerReason } from './types';
+import type { Intervention, SessionAdapter, TriggerReason } from './types';
 
 let adapter: SessionAdapter | undefined;
 let store: KnowledgeStateStore | undefined;
 let sessionGapTimer: NodeJS.Timeout | undefined;
+let currentIntervention: Intervention | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
   // Storage lives in the extension's global storage directory
@@ -49,16 +50,32 @@ export function activate(context: vscode.ExtensionContext): void {
   panel.onSnooze(() => {
     scheduleSnoozedTrigger(adapter!, panel, store!, getSetting('sessionGapMinutes', 10));
   });
-  panel.onAnswer((answer, score) => {
-    // score from MCQ is 1 (correct) or 0 (wrong); free text is scored 0.5 (pending)
-    // TODO: for free-text, optionally send to Claude for scoring
-    void answer; // will be used for scoring in Phase 2
-    const state = store!.getState();
-    // Record result for the most-recently-seen concepts (simplified for v1)
-    const recentConcepts = Object.keys(state.concepts).slice(-3);
-    for (const c of recentConcepts) {
-      store!.recordResult(c, score);
+  panel.onAnswer((answer, _webviewScore) => {
+    if (!currentIntervention) return;
+
+    let score: number;
+    let isCorrect: boolean;
+
+    if (currentIntervention.type === 'concept_check' && currentIntervention.answer) {
+      // Compare the submitted answer to the known correct answer
+      isCorrect = answer.trim() === currentIntervention.answer.trim();
+      score = isCorrect ? 1 : 0;
+    } else {
+      // Free-text (explain_it_back, micro_reading): pending score until Phase 2 scoring
+      score = 0.5;
+      isCorrect = true;
     }
+
+    for (const tag of currentIntervention.conceptTags) {
+      store!.recordResult(tag, score);
+    }
+
+    const explanation =
+      !isCorrect && currentIntervention.answer
+        ? `The correct answer was: ${currentIntervention.answer}`
+        : currentIntervention.body;
+
+    panel.showFeedback(isCorrect, explanation);
   });
 
   context.subscriptions.push({
@@ -150,17 +167,9 @@ async function triggerIntervention(
   const engine = new InterventionEngine(apiKey);
   const intervention = await engine.generate(context, knowledgeState);
 
+  // Store so the answer handler can compare against the correct answer and concept tags
+  currentIntervention = intervention;
   panel.showIntervention(intervention);
-
-  // Record concept tags as seen (score will be updated when user answers)
-  for (const tag of intervention.conceptTags) {
-    knowledgeState.concepts[tag] ??= {
-      seenCount: 0,
-      lastSeen: new Date().toISOString().split('T')[0],
-      avgScore: 0,
-      nextReview: new Date().toISOString().split('T')[0],
-    };
-  }
 }
 
 function getSetting<T>(key: string, defaultValue: T): T {
