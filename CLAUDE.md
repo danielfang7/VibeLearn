@@ -149,6 +149,25 @@ Used for spaced repetition: avoid repeating too soon, increase difficulty on fam
 - [ ] Docs / internal wiki integration
 - [ ] Custom curriculum injection
 
+## gstack
+
+Use the `/browse` skill from gstack for all web browsing. Never use `mcp__claude-in-chrome__*` tools.
+
+Available gstack skills:
+- `/plan-ceo-review` — Review a plan from a CEO perspective
+- `/plan-eng-review` — Review a plan from an engineering perspective
+- `/plan-design-review` — Review a plan from a design perspective
+- `/design-consultation` — Get design consultation
+- `/review` — Review code or a feature
+- `/ship` — Ship a feature
+- `/browse` — Browse the web (use this for all web browsing)
+- `/qa` — QA a feature end-to-end
+- `/qa-only` — Run QA checks only
+- `/qa-design-review` — QA with design review
+- `/setup-browser-cookies` — Set up browser cookies for authenticated sessions
+- `/retro` — Run a retrospective
+- `/document-release` — Document a release
+
 ## Privacy
 
 Diffs may contain sensitive code. v1 must include:
