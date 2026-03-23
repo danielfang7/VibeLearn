@@ -205,6 +205,7 @@ export class ClaudeCodeAdapter implements SessionAdapter {
   }
 
   private getGitDiffs(): FileDiff[] {
+    const ignorePatterns = this.readIgnorePatterns();
     try {
       // First try uncommitted changes
       const uncommitted = execSync('git diff HEAD', {
@@ -212,7 +213,11 @@ export class ClaudeCodeAdapter implements SessionAdapter {
         encoding: 'utf-8',
         stdio: ['pipe', 'pipe', 'pipe'],
       });
-      if (uncommitted.trim()) return parseDiffs(uncommitted, DIFF_CHAR_LIMIT);
+      if (uncommitted.trim()) {
+        return parseDiffs(uncommitted, DIFF_CHAR_LIMIT).filter(
+          (d) => !isIgnored(d.path, ignorePatterns)
+        );
+      }
 
       // Fall back to last 5 commits when there's nothing uncommitted
       const committed = execSync('git diff HEAD~5 HEAD', {
@@ -220,9 +225,28 @@ export class ClaudeCodeAdapter implements SessionAdapter {
         encoding: 'utf-8',
         stdio: ['pipe', 'pipe', 'pipe'],
       });
-      return parseDiffs(committed, DIFF_CHAR_LIMIT);
+      return parseDiffs(committed, DIFF_CHAR_LIMIT).filter(
+        (d) => !isIgnored(d.path, ignorePatterns)
+      );
     } catch {
       return [];
+    }
+  }
+
+  /**
+   * Reads .vibelearningignore from the workspace root.
+   * Returns a list of non-empty, non-comment patterns.
+   */
+  private readIgnorePatterns(): string[] {
+    const ignorePath = path.join(this.workspacePath, '.vibelearningignore');
+    try {
+      const content = fs.readFileSync(ignorePath, 'utf-8');
+      return content
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0 && !line.startsWith('#'));
+    } catch {
+      return []; // file absent — no filtering
     }
   }
 
@@ -251,6 +275,46 @@ function isUserPrompt(entry: Record<string, unknown>): boolean {
   if (content.startsWith('<command-name>')) return false;
   if (content.startsWith('<local-command-caveat>')) return false;
   return content.trim().length > 0;
+}
+
+/**
+ * Returns true if filePath should be excluded based on .vibelearningignore patterns.
+ * Supports gitignore-style patterns:
+ *   secrets/        → matches any file under that directory
+ *   *.env           → matches any file with that extension (any depth)
+ *   **\/*.secret    → same as *.secret but explicit
+ *   exact/path.ts   → exact path match
+ */
+export function isIgnored(filePath: string, patterns: string[]): boolean {
+  const normalized = filePath.replace(/^\//, '');
+  for (const pattern of patterns) {
+    const p = pattern.replace(/^\//, '');
+    // Directory pattern: "secrets/" matches anything under secrets/
+    if (p.endsWith('/')) {
+      if (normalized.startsWith(p) || normalized === p.slice(0, -1)) return true;
+      continue;
+    }
+    // **/*.ext or **/name → strip the **/ prefix and match as suffix
+    if (p.startsWith('**/')) {
+      const suffix = p.slice(3);
+      if (matchesGlob(path.basename(normalized), suffix)) return true;
+      continue;
+    }
+    // *.ext → match basename only
+    if (p.startsWith('*.')) {
+      if (matchesGlob(path.basename(normalized), p)) return true;
+      continue;
+    }
+    // Exact match or simple glob (no **)
+    if (matchesGlob(normalized, p)) return true;
+  }
+  return false;
+}
+
+/** Matches a string against a glob pattern containing * wildcards (single-segment). */
+function matchesGlob(str: string, pattern: string): boolean {
+  const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*');
+  return new RegExp(`^${escaped}$`).test(str);
 }
 
 function parseDiffs(raw: string, charLimit?: number): FileDiff[] {

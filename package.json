@@ -108,6 +108,7 @@
     "test:watch": "vitest",
     "package": "vsce package",
     "dev:seed": "node scripts/seed-session.mjs",
+    "dev:seed:debrief": "node scripts/seed-session.mjs -- --mode=debrief",
     "dev:engine": "node scripts/run-engine.mjs"
   },
   "dependencies": {

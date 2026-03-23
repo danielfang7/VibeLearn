@@ -4,12 +4,6 @@ Deferred work from planning sessions. Each item has context for future pickup.
 
 ---
 
-## ~~P2: Remaining Intervention Types~~ ✅ Done
-
-Shipped. `spot_the_bug`, `refactor_challenge`, and `analogy_prompt` are now live. The engine selects from all 6 quiz types. `spot_the_bug` and `refactor_challenge` render code snippets in `<pre><code>` blocks via updated `renderMarkdown()`. `spot_the_bug` is graded (MCQ); the others are free-text. All types are user-configurable via `vibelearn.enabledInterventionTypes`.
-
----
-
 ## P2: Cursor Adapter
 
 **What:** Implement `CursorAdapter` implementing the `SessionAdapter` interface.
@@ -57,18 +51,19 @@ Shipped. `spot_the_bug`, `refactor_challenge`, and `analogy_prompt` are now live
 **Effort:** L (human ~1 week / CC ~1 hour) | **Priority:** P3 | **Depends on:** Codebase Story + Debrief shipping and accumulating data
 
 
+
 ---
 
-## P2: Dev Seed Script — Debrief Scenario
+## P2: Local Analytics — Intervention Engagement Tracking
 
-**What:** Extend `scripts/seed-session.mjs` with a `--mode=debrief` flag that creates a seeded scenario with a short session gap, making local debrief testing fast.
+**What:** Add a lightweight local event log (`~/.vibelearn/analytics.jsonl` or VS Code globalStorage) recording each intervention event: type shown, whether answered or skipped, API response time, and approximate token cost.
 
-**Why:** Without a debrief seed, locally testing the debrief flow requires waiting 10 real minutes for the session gap timer. That slows iteration on the debrief prompt significantly.
+**Why:** The product currently has zero visibility into whether interventions are engaging or effective. Without this, every prioritization decision (Cursor adapter, SM-2, new types) is a guess. Even a local log with no backend answers: what % of interventions do users engage with? Which types get skipped? What's the Claude API cost per session?
 
-**Pros:** Fast local dev loop for debrief prompt tuning. Takes ~10min to implement.
+**Pros:** Directly informs next feature decisions. Costs nothing to store locally. No backend or privacy concerns — stays on device.
 
-**Cons:** Minor maintenance burden when seed schema changes.
+**Cons:** Adds a small logging overhead to `triggerIntervention()`. Requires a reader (either a panel view or a CLI script) to be useful.
 
-**Context:** The current seed creates user prompt events in `~/.claude/projects/<workspace>/session.jsonl`. A debrief seed would also need to create some fake git diffs in the test workspace. Look at how `scripts/run-engine.mjs` constructs context — mirror that approach. A `--session-gap-minutes=1` flag in the extension settings is the fastest way to trigger the timer during local testing regardless.
+**Context:** Log structure: `{ timestamp, interventionType, triggerReason, answered: bool, skipped: bool, score: number|null, apiLatencyMs: number, approxTokens: number }`. Append to a JSONL file in `context.globalStoragePath`. A companion `npm run dev:analytics` script could summarize the log. Integrate into `extension.ts` in `triggerIntervention()` and `onAnswer()` / `skip` message handler.
 
-**Effort:** S (human ~1hr / CC ~10min) | **Priority:** P2 | **Depends on:** The Debrief feature shipped
+**Effort:** S (human ~2hrs / CC ~15min) | **Priority:** P2 | **Depends on:** Nothing — can ship standalone
