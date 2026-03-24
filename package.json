@@ -105,6 +105,17 @@
           "minimum": 1,
           "maximum": 5,
           "description": "Maximum difficulty score (1–5) for quiz interventions. Decrease to avoid hard questions."
+        },
+        "vibelearn.assessmentDepth": {
+          "type": "string",
+          "enum": ["architecture", "balanced", "implementation"],
+          "enumDescriptions": [
+            "High-level (default): focuses on WHY code was built, how design decisions connect to the overall system and product goals.",
+            "Balanced: mixes architectural context with some implementation specifics.",
+            "Implementation: code-level questions about specific functions, bugs, and patterns."
+          ],
+          "default": "architecture",
+          "description": "How specific assessment questions should be. 'architecture' focuses on design thinking and system understanding; 'implementation' focuses on detailed code mechanics."
         }
       }
     }

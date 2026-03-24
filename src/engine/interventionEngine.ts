@@ -16,10 +16,22 @@ export const ALL_QUIZ_TYPES: InterventionType[] = [
   'analogy_prompt',
 ];
 
+/**
+ * How specific / granular assessments should be.
+ *
+ * - `architecture` (default) — Focus on WHY code was built, how decisions tie
+ *   into the overall system design, and what problem they solve at a product level.
+ * - `balanced` — Mix of architectural context and some implementation specifics.
+ * - `implementation` — Code-level questions: specific functions, bugs, exact
+ *   patterns. Best for developers who want low-level reinforcement.
+ */
+export type AssessmentDepth = 'architecture' | 'balanced' | 'implementation';
+
 export interface QuizConfig {
   enabledTypes?: InterventionType[];
   minDifficulty?: number;
   maxDifficulty?: number;
+  assessmentDepth?: AssessmentDepth;
 }
 
 const DIFF_CHAR_LIMIT = 8000; // ~2000 tokens @ 4 chars/token
@@ -88,15 +100,65 @@ function buildQuizPrompt(context: SessionContext, knowledgeState: KnowledgeState
   const minDiff = config?.minDifficulty ?? 1;
   const maxDiff = Math.max(minDiff, config?.maxDifficulty ?? 5);
 
-  const TYPE_INSTRUCTIONS: Record<string, string> = {
-    concept_check: 'MCQ with exactly 4 options. Options must be plausible enough to require real understanding.',
-    explain_it_back: 'Free text (no options). Ask them to explain a specific function or pattern in 1-2 sentences. No answer field needed.',
-    micro_reading: 'Free text (no options). Provide a 2-3 sentence explanation, then ask one follow-up question. No answer field needed.',
-    spot_the_bug: 'Take a real code snippet from the diffs, introduce ONE subtle bug (off-by-one, wrong operator, missing await, swapped args, etc.), and put the BUGGY code in a markdown code fence in the body. MCQ with 4 options describing possible problems. The answer field is the correct option text.',
-    refactor_challenge: 'Take a real code snippet and challenge them to rewrite it (e.g., using a different pattern, without a library, more functionally). Put the original code in a markdown code fence in the body. Free text response (no options, no answer).',
-    analogy_prompt: 'Ask them to complete an analogy for a design pattern or concept. Body: "The [concept] is like ___ because ___". Free text. Set answer to a strong sample completion so it can be shown as feedback.',
+  const depth = config?.assessmentDepth ?? 'architecture';
+
+  // Per-type instructions vary by depth level.
+  // architecture (default): focus on WHY the code exists, product/system fit, design rationale.
+  // balanced: mix of architectural context and some implementation detail.
+  // implementation: current code-level behaviour (specific bugs, exact functions).
+  const TYPE_INSTRUCTIONS: Record<AssessmentDepth, Record<string, string>> = {
+    architecture: {
+      concept_check: 'MCQ with exactly 4 options. Ask WHY this architectural decision was made — what problem does it solve, what trade-offs did it make, or how does it connect to the rest of the system? Options must require real system-level understanding, not just pattern recognition.',
+      explain_it_back: 'Free text (no options). Ask them to explain WHY this component or design decision exists — what gap it fills in the system and how it serves the product goals. No answer field needed.',
+      micro_reading: 'Free text (no options). Provide a 2-3 sentence explanation of the architectural decision or pattern and why it was the right choice for this system, then ask one follow-up question about how it fits the broader codebase. No answer field needed.',
+      spot_the_bug: 'Describe a conceptual or architectural issue with the approach taken (not a specific code bug). MCQ with 4 options — each option should be a plausible architectural concern. The answer field is the most significant concern.',
+      refactor_challenge: 'Challenge them to rethink the architectural approach: what would change if the requirements shifted, or how might this be redesigned to better serve the product goal? Free text (no options, no answer).',
+      analogy_prompt: 'Ask them to complete a product/system-level analogy: "The way [component] relates to [other component] is like ___ because ___". Body should frame the relationship in system terms. Free text. Set answer to a strong sample completion.',
+    },
+    balanced: {
+      concept_check: 'MCQ with exactly 4 options. Ask about the concept used — its purpose in this context AND a key implementation detail. Options must be plausible enough to require real understanding.',
+      explain_it_back: 'Free text (no options). Ask them to explain a key function or module: what it does AND why it was designed that way. No answer field needed.',
+      micro_reading: 'Free text (no options). Provide a 2-3 sentence explanation covering both what the pattern/concept does and why it was chosen here. Follow with one question that connects implementation to intent. No answer field needed.',
+      spot_the_bug: 'Take a real code snippet from the diffs, introduce ONE subtle bug (off-by-one, wrong operator, missing await, swapped args, etc.), and put the BUGGY code in a markdown code fence in the body. MCQ with 4 options. After identifying the bug, ask why it matters architecturally. The answer field is the correct option text.',
+      refactor_challenge: 'Take a real code snippet and challenge them to improve it — either fixing an implementation issue or better aligning it with the architectural intent. Put the original code in a markdown code fence in the body. Free text (no options, no answer).',
+      analogy_prompt: 'Ask them to complete an analogy for a design pattern or concept that bridges implementation and system design. Body: "The [concept] is like ___ because ___". Free text. Set answer to a strong sample completion.',
+    },
+    implementation: {
+      concept_check: 'MCQ with exactly 4 options. Options must be plausible enough to require real understanding.',
+      explain_it_back: 'Free text (no options). Ask them to explain a specific function or pattern in 1-2 sentences. No answer field needed.',
+      micro_reading: 'Free text (no options). Provide a 2-3 sentence explanation, then ask one follow-up question. No answer field needed.',
+      spot_the_bug: 'Take a real code snippet from the diffs, introduce ONE subtle bug (off-by-one, wrong operator, missing await, swapped args, etc.), and put the BUGGY code in a markdown code fence in the body. MCQ with 4 options describing possible problems. The answer field is the correct option text.',
+      refactor_challenge: 'Take a real code snippet and challenge them to rewrite it (e.g., using a different pattern, without a library, more functionally). Put the original code in a markdown code fence in the body. Free text response (no options, no answer).',
+      analogy_prompt: 'Ask them to complete an analogy for a design pattern or concept. Body: "The [concept] is like ___ because ___". Free text. Set answer to a strong sample completion so it can be shown as feedback.',
+    },
   };
-  const typeInstructions = `Format-specific requirements:\n${enabledTypes.map((t) => `- ${t}: ${TYPE_INSTRUCTIONS[t] ?? t}`).join('\n')}`;
+
+  const depthInstructions = TYPE_INSTRUCTIONS[depth];
+  const typeInstructions = `Format-specific requirements:\n${enabledTypes.map((t) => `- ${t}: ${depthInstructions[t] ?? t}`).join('\n')}`;
+
+  const focusInstruction = depth === 'architecture'
+    ? 'Identify the key architectural decision or design choice made in this session — focus on WHY it was built this way, not just what it does.'
+    : depth === 'balanced'
+      ? 'Identify the single most valuable concept to explore — consider both its purpose in the system and how it was implemented.'
+      : 'Identify the single most valuable concept to test from this session.';
+
+  const generalRules = depth === 'architecture'
+    ? `General rules:
+- Keep it short. Should take under 60 seconds to answer.
+- Be conversational: "You just added X — why do you think this approach was chosen over Y?"
+- Prioritize system-level understanding: product goals, design trade-offs, component relationships.
+- Avoid asking about specific line numbers, syntax, or implementation minutiae.
+- If the concept is advanced, prefer micro_reading over a hard quiz.
+- Never repeat a concept with seenCount > 3 unless its nextReview date has passed.
+- Pick a DIFFERENT concept and format than any recently seen intervention.
+- difficultyScore must be between ${minDiff} and ${maxDiff}.`
+    : `General rules:
+- Keep it short. Should take under 60 seconds to answer.
+- Be conversational, not academic. "Hey, you just used X — do you know how it differs from Y?"
+- If the concept is advanced, prefer micro_reading over a hard quiz.
+- Never repeat a concept with seenCount > 3 unless its nextReview date has passed.
+- Pick a DIFFERENT concept and format than any recently seen intervention.
+- difficultyScore must be between ${minDiff} and ${maxDiff}.`;
 
   return `You are a developer education assistant. A developer just finished an AI-assisted coding session.
 
@@ -115,7 +177,7 @@ Developer's prior knowledge state:
 ${knowledgeSummary}
 
 Your job:
-1. Identify the single most valuable concept to test from this session.
+1. ${focusInstruction}
 2. Choose the best intervention format from: ${enabledTypes.join(', ')}
 3. Return ONLY a valid JSON object matching this schema (no markdown, no explanation):
 {
@@ -130,13 +192,7 @@ Your job:
 
 ${typeInstructions}
 
-General rules:
-- Keep it short. Should take under 60 seconds to answer.
-- Be conversational, not academic. "Hey, you just used X — do you know how it differs from Y?"
-- If the concept is advanced, prefer micro_reading over a hard quiz.
-- Never repeat a concept with seenCount > 3 unless its nextReview date has passed.
-- Pick a DIFFERENT concept and format than any recently seen intervention.
-- difficultyScore must be between ${minDiff} and ${maxDiff}.`;
+${generalRules}`;
 }
 
 function buildDebriefPrompt(context: SessionContext, priorStory: CodebaseStoryEntry[]): string {

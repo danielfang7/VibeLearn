@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { ClaudeCodeAdapter } from './adapters/claudeCode';
-import { InterventionEngine, ALL_QUIZ_TYPES, type QuizConfig } from './engine/interventionEngine';
+import { InterventionEngine, ALL_QUIZ_TYPES, type AssessmentDepth, type QuizConfig } from './engine/interventionEngine';
 import { KnowledgeStateStore } from './storage/knowledgeState';
 import { CodebaseStoryStore } from './storage/codebaseStoryStore';
 import { VibeLearnPanel } from './ui/panel';
@@ -274,6 +274,7 @@ async function triggerIntervention(
         enabledTypes: getSetting<InterventionType[]>('enabledInterventionTypes', ALL_QUIZ_TYPES as InterventionType[]),
         minDifficulty: getSetting<number>('minDifficulty', 1),
         maxDifficulty: getSetting<number>('maxDifficulty', 5),
+        assessmentDepth: getSetting<AssessmentDepth>('assessmentDepth', 'architecture'),
       };
       intervention = await engine.generateQuiz(context, knowledgeState, quizConfig);
       adapter.markQuizTriggered?.();
