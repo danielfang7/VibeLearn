@@ -4,7 +4,7 @@ Deferred work from planning sessions. Each item has context for future pickup.
 
 ---
 
-## P2: Cursor Adapter
+## P3: Cursor Adapter
 
 **What:** Implement `CursorAdapter` implementing the `SessionAdapter` interface.
 
@@ -16,7 +16,7 @@ Deferred work from planning sessions. Each item has context for future pickup.
 
 **Context:** Start by running Cursor and inspecting `~/Library/Application Support/Cursor/` or equivalent on Windows/Linux. Look for JSONL or SQLite files containing conversation history. The adapter needs to implement `startWatching()`, `readRecentPrompts()`, and `getPromptCount()`. Reference `ClaudeCodeAdapter` as the canonical example.
 
-**Effort:** M (human ~3 days / CC ~30 min once format known) | **Priority:** P2 | **Depends on:** The Debrief shipped and proven on Claude Code
+**Effort:** M (human ~3 days / CC ~30 min once format known) | **Priority:** P3 | **Depends on:** The Debrief shipped and proven on Claude Code
 
 ---
 
@@ -54,7 +54,7 @@ Deferred work from planning sessions. Each item has context for future pickup.
 
 ---
 
-## P2: Local Analytics — Intervention Engagement Tracking
+## ~~P2: Local Analytics — Intervention Engagement Tracking~~ ✓ DONE
 
 **What:** Add a lightweight local event log (`~/.vibelearn/analytics.jsonl` or VS Code globalStorage) recording each intervention event: type shown, whether answered or skipped, API response time, and approximate token cost.
 
@@ -70,7 +70,7 @@ Deferred work from planning sessions. Each item has context for future pickup.
 
 ---
 
-## P2: Idle View — "No concepts yet" placeholder
+## ~~P2: Idle View — "No concepts yet" placeholder~~ ✓ DONE
 
 **What:** When the idle view renders the "Last reinforced" concept card but no concepts have been recorded yet (fresh install, no answered quizzes), show a motivating placeholder instead of an empty space.
 

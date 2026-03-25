@@ -43,6 +43,7 @@ export class VibeLearnPanel implements vscode.WebviewViewProvider {
   private onRateCallback?: (stars: number, conceptTags: string[]) => void;
   private onExplainCodebaseCallback?: () => void;
   private onOpenStoryCallback?: () => void;
+  private onSkipCallback?: () => void;
 
   resolveWebviewView(
     webviewView: vscode.WebviewView,
@@ -92,6 +93,9 @@ export class VibeLearnPanel implements vscode.WebviewViewProvider {
           this.onSnoozeCallback?.();
           break;
         case 'skip':
+          this.onSkipCallback?.();
+          webviewView.webview.html = this.idleHtml();
+          break;
         case 'skipRating':
           webviewView.webview.html = this.idleHtml();
           break;
@@ -215,6 +219,7 @@ export class VibeLearnPanel implements vscode.WebviewViewProvider {
   onRate(cb: (stars: number, conceptTags: string[]) => void): void { this.onRateCallback = cb; }
   onExplainCodebase(cb: () => void): void { this.onExplainCodebaseCallback = cb; }
   onOpenStory(cb: () => void): void { this.onOpenStoryCallback = cb; }
+  onSkip(cb: () => void): void { this.onSkipCallback = cb; }
 
   // ── Private helpers ──────────────────────────────────────────────────────────
 

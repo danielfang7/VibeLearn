@@ -7,18 +7,22 @@ import { KnowledgeStateStore } from './storage/knowledgeState';
 import { CodebaseStoryStore } from './storage/codebaseStoryStore';
 import { VibeLearnPanel } from './ui/panel';
 import { logger } from './logger';
+import { AnalyticsLog, type AnalyticsEvent } from './storage/analyticsLog';
 import type { Intervention, InterventionType, SessionAdapter, TriggerReason } from './types';
 
 let adapter: SessionAdapter | undefined;
 let store: KnowledgeStateStore | undefined;
 let storyStore: CodebaseStoryStore | undefined;
+let analyticsLog: AnalyticsLog | undefined;
 let sessionGapTimer: NodeJS.Timeout | undefined;
 let currentIntervention: Intervention | undefined;
+let pendingEvent: AnalyticsEvent | undefined;
 let isGenerating = false; // concurrency guard — prevents overlapping API calls
 let statusBarItem: vscode.StatusBarItem | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
   store = new KnowledgeStateStore(context.globalStorageUri.fsPath);
+  analyticsLog = new AnalyticsLog(context.globalStorageUri.fsPath);
 
   const panel = new VibeLearnPanel();
   context.subscriptions.push(
@@ -83,6 +87,11 @@ export function activate(context: vscode.ExtensionContext): void {
       store!.recordResult(tag, score);
     }
 
+    if (pendingEvent) {
+      analyticsLog?.append({ ...pendingEvent, answered: true, score });
+      pendingEvent = undefined;
+    }
+
     const explanation =
       currentIntervention.answer
         ? isCorrect
@@ -102,6 +111,12 @@ export function activate(context: vscode.ExtensionContext): void {
   panel.onOpenStory(() => {
     if (!storyStore) return;
     panel.showStory(storyStore.getAllEntries());
+  });
+  panel.onSkip(() => {
+    if (pendingEvent) {
+      analyticsLog?.append({ ...pendingEvent, skipped: true });
+      pendingEvent = undefined;
+    }
   });
 
   const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -228,6 +243,7 @@ async function triggerIntervention(
 
   isGenerating = true;
   logger.log(`triggerIntervention(${reason}): starting generation`);
+  const triggerStart = Date.now();
 
   try {
     const engine = new InterventionEngine(apiKey);
@@ -283,6 +299,17 @@ async function triggerIntervention(
       currentIntervention = intervention;
       panel.showIntervention(intervention);
     }
+
+    pendingEvent = {
+      timestamp: new Date().toISOString(),
+      interventionType: intervention.type,
+      triggerReason: reason,
+      answered: false,
+      skipped: false,
+      score: null,
+      apiLatencyMs: Date.now() - triggerStart,
+      approxTokens: engine.lastTokens,
+    };
 
     logger.log(`triggerIntervention(${reason}): completed — type=${intervention.type}`);
   } catch (err) {

@@ -45,7 +45,7 @@ export function getIdleHtml(
         <strong>${escHtml(lastConcept.tag)}</strong>
         <div class="hint">${daysSince(lastConcept.lastSeen)} · ${renderMasteryStars(lastConcept.avgScore)}</div>
       </div>`
-    : '';
+    : `<div class="last-concept"><p class="hint">Answer your first quiz to start tracking concepts.</p></div>`;
 
   const storyHint =
     storyEntryCount > 0

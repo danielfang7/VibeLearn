@@ -38,6 +38,7 @@ const DIFF_CHAR_LIMIT = 8000; // ~2000 tokens @ 4 chars/token
 
 export class InterventionEngine {
   private client: Anthropic;
+  lastTokens = 0;
 
   constructor(apiKey: string) {
     this.client = new Anthropic({ apiKey });
@@ -77,6 +78,7 @@ export class InterventionEngine {
       max_tokens: 1024,
       messages: [{ role: 'user', content: prompt }],
     });
+    this.lastTokens = response.usage.input_tokens + response.usage.output_tokens;
     const block = response.content[0];
     return block.type === 'text' ? block.text : '';
   }
