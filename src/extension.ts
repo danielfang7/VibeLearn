@@ -84,8 +84,10 @@ export function activate(context: vscode.ExtensionContext): void {
     }
 
     const explanation =
-      !isCorrect && currentIntervention.answer
-        ? `The correct answer was: ${currentIntervention.answer}`
+      currentIntervention.answer
+        ? isCorrect
+          ? currentIntervention.answer
+          : `The correct answer was: ${currentIntervention.answer}`
         : currentIntervention.body;
 
     panel.showFeedback(isCorrect, explanation, currentIntervention.conceptTags);
